@@ -1,0 +1,1803 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Mini Forager Clone</title>
+  <style>
+    canvas {
+      background: #87CEEB; /* 天空蓝背景 */
+      display: block;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// 游戏世界参数
+const TILE_SIZE = 40;
+const WORLD_WIDTH = 20;
+const WORLD_HEIGHT = 15;
+
+// 玩家对象
+let player = {
+  x: 5,
+  y: 5,
+  size: 30,
+  color: "yellow",
+  speed: 0.2,
+  vx: 0,
+  vy: 0
+};
+
+// 键盘输入
+let keys = {};
+
+// 地图资源（简单随机生成草地和石头）
+let world = [];
+function generateWorld() {
+  for (let y = 0; y < WORLD_HEIGHT; y++) {
+    let row = [];
+    for (let x = 0; x < WORLD_WIDTH; x++) {
+      let tileType = Math.random() < 0.1 ? "stone" : "grass";
+      row.push(tileType);
+    }
+    world.push(row);
+  }
+}
+
+// 绘制地图
+function drawWorld() {
+  for (let y = 0; y < WORLD_HEIGHT; y++) {
+    for (let x = 0; x < WORLD_WIDTH; x++) {
+      if (world[y][x] === "grass") {
+        ctx.fillStyle = "#228B22"; // 草地绿色
+      } else if (world[y][x] === "stone") {
+        ctx.fillStyle = "#808080"; // 石头灰色
+      }
+      ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    }
+  }
+}
+
+// 绘制玩家
+function drawPlayer() {
+  ctx.fillStyle = player.color;
+  ctx.beginPath();
+  ctx.arc(
+    player.x * TILE_SIZE + TILE_SIZE / 2,
+    player.y * TILE_SIZE + TILE_SIZE / 2,
+    player.size / 2,
+    0,
+    Math.PI * 2
+  );
+  ctx.fill();
+}
+
+// 更新玩家位置
+function updatePlayer(delta) {
+  player.x += player.vx * delta;
+  player.y += player.vy * delta;
+
+  // 边界限制
+  if (player.x < 0) player.x = 0;
+  if (player.y < 0) player.y = 0;
+  if (player.x > WORLD_WIDTH - 1) player.x = WORLD_WIDTH - 1;
+  if (player.y > WORLD_HEIGHT - 1) player.y = WORLD_HEIGHT - 1;
+}
+
+// 键盘事件
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 根据输入更新速度
+function handleInput() {
+  player.vx = 0;
+  player.vy = 0;
+  if (keys["ArrowUp"]) player.vy = -player.speed;
+  if (keys["ArrowDown"]) player.vy = player.speed;
+  if (keys["ArrowLeft"]) player.vx = -player.speed;
+  if (keys["ArrowRight"]) player.vx = player.speed;
+}
+
+// 游戏循环
+let lastTime = performance.now();
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 初始化
+generateWorld();
+requestAnimationFrame(gameLoop);
+
+// 背包系统
+let inventory = {
+  grass: 0,
+  stone: 0
+};
+
+// 绘制背包
+function drawInventory() {
+  ctx.fillStyle = "white";
+  ctx.font = "16px Arial";
+  ctx.fillText("Grass: " + inventory.grass, 10, canvas.height - 40);
+  ctx.fillText("Stone: " + inventory.stone, 10, canvas.height - 20);
+}
+
+// 采集资源函数
+function collectResource() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  if (world[py][px] === "grass") {
+    inventory.grass++;
+    world[py][px] = "empty"; // 采集后变为空地
+  } else if (world[py][px] === "stone") {
+    inventory.stone++;
+    world[py][px] = "empty";
+  }
+}
+
+// 绘制地图（更新：加入空地）
+function drawWorld() {
+  for (let y = 0; y < WORLD_HEIGHT; y++) {
+    for (let x = 0; x < WORLD_WIDTH; x++) {
+      if (world[y][x] === "grass") {
+        ctx.fillStyle = "#228B22"; // 草地绿色
+      } else if (world[y][x] === "stone") {
+        ctx.fillStyle = "#808080"; // 石头灰色
+      } else {
+        ctx.fillStyle = "#C2B280"; // 空地浅棕色
+      }
+      ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    }
+  }
+}
+
+// 键盘事件更新（加入采集按键）
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === " ") { // 空格键采集
+    collectResource();
+  }
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 游戏循环更新（加入背包显示）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawInventory();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 建筑物列表
+let buildings = [];
+
+// 建造函数：在玩家当前位置建造小屋
+function buildHouse() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  // 必须是空地才能建造
+  if (world[py][px] === "empty" && inventory.stone >= 3) {
+    inventory.stone -= 3; // 消耗石头
+    buildings.push({ x: px, y: py, type: "house" });
+    world[py][px] = "house";
+  }
+}
+
+// 绘制地图（更新：加入建筑物）
+function drawWorld() {
+  for (let y = 0; y < WORLD_HEIGHT; y++) {
+    for (let x = 0; x < WORLD_WIDTH; x++) {
+      if (world[y][x] === "grass") {
+        ctx.fillStyle = "#228B22"; // 草地绿色
+      } else if (world[y][x] === "stone") {
+        ctx.fillStyle = "#808080"; // 石头灰色
+      } else if (world[y][x] === "house") {
+        ctx.fillStyle = "#8B4513"; // 小屋棕色
+      } else {
+        ctx.fillStyle = "#C2B280"; // 空地浅棕色
+      }
+      ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    }
+  }
+}
+
+// 键盘事件更新（加入建造按键）
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === " ") { // 空格采集
+    collectResource();
+  }
+  if (e.key === "b") { // 按 B 键建造
+    buildHouse();
+  }
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 游戏循环更新（加入建筑显示）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawInventory();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 合成配方
+let recipes = [
+  { name: "tool", cost: { grass: 2, stone: 1 } }
+];
+
+// 背包扩展：加入工具数量
+inventory.tool = 0;
+
+// 合成函数
+function craftItem(itemName) {
+  let recipe = recipes.find(r => r.name === itemName);
+  if (!recipe) return;
+
+  // 检查资源是否足够
+  let canCraft = true;
+  for (let res in recipe.cost) {
+    if (inventory[res] < recipe.cost[res]) {
+      canCraft = false;
+    }
+  }
+
+  if (canCraft) {
+    // 消耗资源
+    for (let res in recipe.cost) {
+      inventory[res] -= recipe.cost[res];
+    }
+    // 增加物品
+    inventory[itemName]++;
+  }
+}
+
+// 绘制背包（更新：加入工具显示）
+function drawInventory() {
+  ctx.fillStyle = "white";
+  ctx.font = "16px Arial";
+  ctx.fillText("Grass: " + inventory.grass, 10, canvas.height - 60);
+  ctx.fillText("Stone: " + inventory.stone, 10, canvas.height - 40);
+  ctx.fillText("Tool: " + inventory.tool, 10, canvas.height - 20);
+}
+
+// 键盘事件更新（加入合成按键）
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === " ") { // 空格采集
+    collectResource();
+  }
+  if (e.key === "b") { // B 键建造
+    buildHouse();
+  }
+  if (e.key === "c") { // C 键合成工具
+    craftItem("tool");
+  }
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 游戏循环更新（保持不变）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawInventory();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 玩家升级属性
+let upgrades = {
+  toolLevel: 0
+};
+
+// 使用工具提升采集速度
+function collectResource() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  let baseChance = 1; // 基础采集成功率
+  let bonus = upgrades.toolLevel * 0.5; // 工具等级加成
+
+  if (world[py][px] === "grass") {
+    if (Math.random() < baseChance + bonus) {
+      inventory.grass++;
+      world[py][px] = "empty";
+    }
+  } else if (world[py][px] === "stone") {
+    if (Math.random() < baseChance + bonus) {
+      inventory.stone++;
+      world[py][px] = "empty";
+    }
+  }
+}
+
+// 升级函数：使用工具提升等级
+function upgradeTool() {
+  if (inventory.tool > 0) {
+    inventory.tool--;
+    upgrades.toolLevel++;
+  }
+}
+
+// 绘制背包（更新：显示工具等级）
+function drawInventory() {
+  ctx.fillStyle = "white";
+  ctx.font = "16px Arial";
+  ctx.fillText("Grass: " + inventory.grass, 10, canvas.height - 80);
+  ctx.fillText("Stone: " + inventory.stone, 10, canvas.height - 60);
+  ctx.fillText("Tool: " + inventory.tool, 10, canvas.height - 40);
+  ctx.fillText("Tool Level: " + upgrades.toolLevel, 10, canvas.height - 20);
+}
+
+// 键盘事件更新（加入升级按键）
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === " ") { // 空格采集
+    collectResource();
+  }
+  if (e.key === "b") { // B 键建造
+    buildHouse();
+  }
+  if (e.key === "c") { // C 键合成工具
+    craftItem("tool");
+  }
+  if (e.key === "u") { // U 键升级工具
+    upgradeTool();
+  }
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 游戏循环更新（保持不变）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawInventory();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 敌人列表
+let enemies = [];
+
+// 生成敌人（随机位置）
+function spawnEnemy() {
+  let ex = Math.floor(Math.random() * WORLD_WIDTH);
+  let ey = Math.floor(Math.random() * WORLD_HEIGHT);
+  enemies.push({ x: ex, y: ey, hp: 3, type: "slime" });
+}
+
+// 绘制敌人
+function drawEnemies() {
+  enemies.forEach(enemy => {
+    ctx.fillStyle = "purple";
+    ctx.beginPath();
+    ctx.arc(
+      enemy.x * TILE_SIZE + TILE_SIZE / 2,
+      enemy.y * TILE_SIZE + TILE_SIZE / 2,
+      TILE_SIZE / 2 - 5,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+  });
+}
+
+// 攻击敌人函数
+function attackEnemy() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  enemies.forEach((enemy, index) => {
+    if (enemy.x === px && enemy.y === py) {
+      if (upgrades.toolLevel > 0) {
+        enemy.hp -= upgrades.toolLevel; // 工具等级决定伤害
+      } else {
+        enemy.hp -= 1; // 基础伤害
+      }
+
+      if (enemy.hp <= 0) {
+        // 击败敌人奖励：掉落石头或草
+        if (Math.random() < 0.5) {
+          inventory.stone++;
+        } else {
+          inventory.grass++;
+        }
+        enemies.splice(index, 1);
+      }
+    }
+  });
+}
+
+// 键盘事件更新（加入攻击按键）
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === " ") { // 空格采集
+    collectResource();
+  }
+  if (e.key === "b") { // B 键建造
+    buildHouse();
+  }
+  if (e.key === "c") { // C 键合成工具
+    craftItem("tool");
+  }
+  if (e.key === "u") { // U 键升级工具
+    upgradeTool();
+  }
+  if (e.key === "x") { // X 键攻击敌人
+    attackEnemy();
+  }
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 游戏循环更新（加入敌人绘制）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawEnemies();
+  drawInventory();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 初始化：生成几个敌人
+for (let i = 0; i < 5; i++) {
+  spawnEnemy();
+}
+
+// 任务系统
+let quests = [
+  { id: 1, description: "收集 10 草", requirement: { grass: 10 }, reward: { tool: 1 }, completed: false }
+];
+
+// 当前任务
+let activeQuest = null;
+
+// NPC 列表
+let npcs = [{ x: 2, y: 2, type: "npc" }];
+
+// 绘制 NPC
+function drawNPCs() {
+  npcs.forEach(npc => {
+    ctx.fillStyle = "blue";
+    ctx.fillRect(npc.x * TILE_SIZE + 10, npc.y * TILE_SIZE + 10, TILE_SIZE - 20, TILE_SIZE - 20);
+  });
+}
+
+// 接受任务
+function acceptQuest() {
+  if (!activeQuest) {
+    activeQuest = quests[0]; // 简单起见，只接第一个任务
+  }
+}
+
+// 检查任务完成情况
+function checkQuestCompletion() {
+  if (activeQuest && !activeQuest.completed) {
+    let req = activeQuest.requirement;
+    let done = true;
+    for (let res in req) {
+      if (inventory[res] < req[res]) {
+        done = false;
+      }
+    }
+    if (done) {
+      // 完成任务，发放奖励
+      for (let reward in activeQuest.reward) {
+        inventory[reward] += activeQuest.reward[reward];
+      }
+      activeQuest.completed = true;
+    }
+  }
+}
+
+// 绘制任务信息
+function drawQuestInfo() {
+  if (activeQuest) {
+    ctx.fillStyle = "white";
+    ctx.font = "16px Arial";
+    ctx.fillText("任务: " + activeQuest.description, canvas.width - 200, 20);
+    ctx.fillText("完成: " + (activeQuest.completed ? "是" : "否"), canvas.width - 200, 40);
+  }
+}
+
+// 键盘事件更新（加入任务按键）
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === " ") { // 空格采集
+    collectResource();
+  }
+  if (e.key === "b") { // B 键建造
+    buildHouse();
+  }
+  if (e.key === "c") { // C 键合成工具
+    craftItem("tool");
+  }
+  if (e.key === "u") { // U 键升级工具
+    upgradeTool();
+  }
+  if (e.key === "x") { // X 键攻击敌人
+    attackEnemy();
+  }
+  if (e.key === "q") { // Q 键接受任务
+    acceptQuest();
+  }
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 游戏循环更新（加入 NPC 和任务显示）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+  checkQuestCompletion();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawEnemies();
+  drawNPCs();
+  drawInventory();
+  drawQuestInfo();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 存档函数
+function saveGame() {
+  let saveData = {
+    inventory: inventory,
+    upgrades: upgrades,
+    activeQuest: activeQuest,
+    quests: quests,
+    world: world,
+    buildings: buildings,
+    enemies: enemies
+  };
+  localStorage.setItem("foragerSave", JSON.stringify(saveData));
+}
+
+// 读取存档函数
+function loadGame() {
+  let data = localStorage.getItem("foragerSave");
+  if (data) {
+    let saveData = JSON.parse(data);
+    inventory = saveData.inventory;
+    upgrades = saveData.upgrades;
+    activeQuest = saveData.activeQuest;
+    quests = saveData.quests;
+    world = saveData.world;
+    buildings = saveData.buildings;
+    enemies = saveData.enemies;
+  }
+}
+
+// 键盘事件更新（加入存档/加载按键）
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === " ") { // 空格采集
+    collectResource();
+  }
+  if (e.key === "b") { // B 键建造
+    buildHouse();
+  }
+  if (e.key === "c") { // C 键合成工具
+    craftItem("tool");
+  }
+  if (e.key === "u") { // U 键升级工具
+    upgradeTool();
+  }
+  if (e.key === "x") { // X 键攻击敌人
+    attackEnemy();
+  }
+  if (e.key === "q") { // Q 键接受任务
+    acceptQuest();
+  }
+  if (e.key === "s") { // S 键存档
+    saveGame();
+  }
+  if (e.key === "l") { // L 键加载存档
+    loadGame();
+  }
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 游戏循环更新（保持不变）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+  checkQuestCompletion();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawEnemies();
+  drawNPCs();
+  drawInventory();
+  drawQuestInfo();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 经济系统：金币
+inventory.gold = 0;
+
+// 商店物品
+let shopItems = [
+  { name: "tool", price: 5 }
+];
+
+// 打开商店函数
+let shopOpen = false;
+function toggleShop() {
+  shopOpen = !shopOpen;
+}
+
+// 购买物品函数
+function buyItem(itemName) {
+  let item = shopItems.find(i => i.name === itemName);
+  if (item && inventory.gold >= item.price) {
+    inventory.gold -= item.price;
+    inventory[itemName]++;
+  }
+}
+
+// 绘制商店界面
+function drawShop() {
+  if (shopOpen) {
+    ctx.fillStyle = "rgba(0,0,0,0.7)";
+    ctx.fillRect(canvas.width/2 - 100, canvas.height/2 - 100, 200, 200);
+
+    ctx.fillStyle = "white";
+    ctx.font = "16px Arial";
+    ctx.fillText("商店", canvas.width/2 - 20, canvas.height/2 - 70);
+
+    shopItems.forEach((item, index) => {
+      ctx.fillText(
+        item.name + " - " + item.price + " 金币",
+        canvas.width/2 - 80,
+        canvas.height/2 - 40 + index * 30
+      );
+    });
+
+    ctx.fillText("按 P 键购买工具", canvas.width/2 - 80, canvas.height/2 + 60);
+  }
+}
+
+// 更新背包显示（加入金币）
+function drawInventory() {
+  ctx.fillStyle = "white";
+  ctx.font = "16px Arial";
+  ctx.fillText("Grass: " + inventory.grass, 10, canvas.height - 100);
+  ctx.fillText("Stone: " + inventory.stone, 10, canvas.height - 80);
+  ctx.fillText("Tool: " + inventory.tool, 10, canvas.height - 60);
+  ctx.fillText("Tool Level: " + upgrades.toolLevel, 10, canvas.height - 40);
+  ctx.fillText("Gold: " + inventory.gold, 10, canvas.height - 20);
+}
+
+// 击败敌人奖励金币（更新）
+function attackEnemy() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  enemies.forEach((enemy, index) => {
+    if (enemy.x === px && enemy.y === py) {
+      if (upgrades.toolLevel > 0) {
+        enemy.hp -= upgrades.toolLevel;
+      } else {
+        enemy.hp -= 1;
+      }
+
+      if (enemy.hp <= 0) {
+        // 奖励：掉落资源 + 金币
+        if (Math.random() < 0.5) {
+          inventory.stone++;
+        } else {
+          inventory.grass++;
+        }
+        inventory.gold += 2; // 每个敌人掉落金币
+        enemies.splice(index, 1);
+      }
+    }
+  });
+}
+
+// 键盘事件更新（加入商店按键）
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === "o") { // O 键打开/关闭商店
+    toggleShop();
+  }
+  if (e.key === "p" && shopOpen) { // P 键购买工具
+    buyItem("tool");
+  }
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 游戏循环更新（加入商店绘制）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+  checkQuestCompletion();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawEnemies();
+  drawNPCs();
+  drawInventory();
+  drawQuestInfo();
+  drawShop();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 时间系统
+let gameTime = 0; // 游戏时间（毫秒）
+let dayLength = 20000; // 一天长度：20秒
+let isNight = false;
+
+// 更新时间
+function updateTime(delta) {
+  gameTime += delta;
+  if (gameTime >= dayLength) {
+    gameTime = 0;
+  }
+  isNight = gameTime > dayLength / 2;
+}
+
+// 绘制昼夜效果
+function drawDayNightOverlay() {
+  if (isNight) {
+    ctx.fillStyle = "rgba(0,0,50,0.3)"; // 夜晚蓝色透明遮罩
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+}
+
+// 敌人攻击更新（夜晚更强）
+function attackEnemy() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  enemies.forEach((enemy, index) => {
+    if (enemy.x === px && enemy.y === py) {
+      let damage = upgrades.toolLevel > 0 ? upgrades.toolLevel : 1;
+      if (isNight) {
+        damage = Math.floor(damage * 0.5); // 夜晚敌人更耐打
+      }
+      enemy.hp -= damage;
+
+      if (enemy.hp <= 0) {
+        // 奖励：掉落资源 + 金币
+        if (Math.random() < 0.5) {
+          inventory.stone++;
+        } else {
+          inventory.grass++;
+        }
+        inventory.gold += isNight ? 3 : 2; // 夜晚掉落更多金币
+        enemies.splice(index, 1);
+      }
+    }
+  });
+}
+
+// 游戏循环更新（加入昼夜）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+  updateTime(delta);
+  checkQuestCompletion();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawEnemies();
+  drawNPCs();
+  drawInventory();
+  drawQuestInfo();
+  drawShop();
+  drawDayNightOverlay();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 音效资源
+let sounds = {
+  collect: new Audio("sounds/collect.mp3"),
+  build: new Audio("sounds/build.mp3"),
+  attack: new Audio("sounds/attack.mp3"),
+  questComplete: new Audio("sounds/questComplete.mp3"),
+  shopBuy: new Audio("sounds/shopBuy.mp3")
+};
+
+// 播放音效函数
+function playSound(name) {
+  if (sounds[name]) {
+    sounds[name].currentTime = 0; // 重置播放位置
+    sounds[name].play();
+  }
+}
+
+// 更新采集函数（加入音效）
+function collectResource() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  let baseChance = 1;
+  let bonus = upgrades.toolLevel * 0.5;
+
+  if (world[py][px] === "grass") {
+    if (Math.random() < baseChance + bonus) {
+      inventory.grass++;
+      world[py][px] = "empty";
+      playSound("collect");
+    }
+  } else if (world[py][px] === "stone") {
+    if (Math.random() < baseChance + bonus) {
+      inventory.stone++;
+      world[py][px] = "empty";
+      playSound("collect");
+    }
+  }
+}
+
+// 更新建造函数（加入音效）
+function buildHouse() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  if (world[py][px] === "empty" && inventory.stone >= 3) {
+    inventory.stone -= 3;
+    buildings.push({ x: px, y: py, type: "house" });
+    world[py][px] = "house";
+    playSound("build");
+  }
+}
+
+// 更新攻击函数（加入音效）
+function attackEnemy() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  enemies.forEach((enemy, index) => {
+    if (enemy.x === px && enemy.y === py) {
+      let damage = upgrades.toolLevel > 0 ? upgrades.toolLevel : 1;
+      if (isNight) damage = Math.floor(damage * 0.5);
+      enemy.hp -= damage;
+
+      playSound("attack");
+
+      if (enemy.hp <= 0) {
+        if (Math.random() < 0.5) {
+          inventory.stone++;
+        } else {
+          inventory.grass++;
+        }
+        inventory.gold += isNight ? 3 : 2;
+        enemies.splice(index, 1);
+      }
+    }
+  });
+}
+
+// 更新任务完成函数（加入音效）
+function checkQuestCompletion() {
+  if (activeQuest && !activeQuest.completed) {
+    let req = activeQuest.requirement;
+    let done = true;
+    for (let res in req) {
+      if (inventory[res] < req[res]) {
+        done = false;
+      }
+    }
+    if (done) {
+      for (let reward in activeQuest.reward) {
+        inventory[reward] += activeQuest.reward[reward];
+      }
+      activeQuest.completed = true;
+      playSound("questComplete");
+    }
+  }
+}
+
+// 更新商店购买函数（加入音效）
+function buyItem(itemName) {
+  let item = shopItems.find(i => i.name === itemName);
+  if (item && inventory.gold >= item.price) {
+    inventory.gold -= item.price;
+    inventory[itemName]++;
+    playSound("shopBuy");
+  }
+}
+
+// 动画效果列表
+let effects = [];
+
+// 添加动画效果
+function addEffect(x, y, type) {
+  effects.push({ x, y, type, life: 30 }); // life 表示持续帧数
+}
+
+// 绘制动画效果
+function drawEffects() {
+  effects.forEach((effect, index) => {
+    if (effect.type === "spark") {
+      ctx.fillStyle = "rgba(255,255,0," + effect.life/30 + ")";
+      ctx.beginPath();
+      ctx.arc(
+        effect.x * TILE_SIZE + TILE_SIZE/2,
+        effect.y * TILE_SIZE + TILE_SIZE/2,
+        (30 - effect.life),
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    } else if (effect.type === "build") {
+      ctx.fillStyle = "rgba(139,69,19," + effect.life/30 + ")";
+      ctx.fillRect(
+        effect.x * TILE_SIZE,
+        effect.y * TILE_SIZE,
+        TILE_SIZE,
+        TILE_SIZE
+      );
+    } else if (effect.type === "hit") {
+      ctx.fillStyle = "rgba(255,0,0," + effect.life/30 + ")";
+      ctx.beginPath();
+      ctx.arc(
+        effect.x * TILE_SIZE + TILE_SIZE/2,
+        effect.y * TILE_SIZE + TILE_SIZE/2,
+        TILE_SIZE/3,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    }
+
+    effect.life--;
+    if (effect.life <= 0) {
+      effects.splice(index, 1);
+    }
+  });
+}
+
+// 更新采集函数（加入动画）
+function collectResource() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  let baseChance = 1;
+  let bonus = upgrades.toolLevel * 0.5;
+
+  if (world[py][px] === "grass") {
+    if (Math.random() < baseChance + bonus) {
+      inventory.grass++;
+      world[py][px] = "empty";
+      playSound("collect");
+      addEffect(px, py, "spark");
+    }
+  } else if (world[py][px] === "stone") {
+    if (Math.random() < baseChance + bonus) {
+      inventory.stone++;
+      world[py][px] = "empty";
+      playSound("collect");
+      addEffect(px, py, "spark");
+    }
+  }
+}
+
+// 更新建造函数（加入动画）
+function buildHouse() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  if (world[py][px] === "empty" && inventory.stone >= 3) {
+    inventory.stone -= 3;
+    buildings.push({ x: px, y: py, type: "house" });
+    world[py][px] = "house";
+    playSound("build");
+    addEffect(px, py, "build");
+  }
+}
+
+// 更新攻击函数（加入动画）
+function attackEnemy() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  enemies.forEach((enemy, index) => {
+    if (enemy.x === px && enemy.y === py) {
+      let damage = upgrades.toolLevel > 0 ? upgrades.toolLevel : 1;
+      if (isNight) damage = Math.floor(damage * 0.5);
+      enemy.hp -= damage;
+
+      playSound("attack");
+      addEffect(px, py, "hit");
+
+      if (enemy.hp <= 0) {
+        if (Math.random() < 0.5) {
+          inventory.stone++;
+        } else {
+          inventory.grass++;
+        }
+        inventory.gold += isNight ? 3 : 2;
+        enemies.splice(index, 1);
+      }
+    }
+  });
+}
+
+// 游戏循环更新（加入动画绘制）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+  updateTime(delta);
+  checkQuestCompletion();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawEnemies();
+  drawNPCs();
+  drawInventory();
+  drawQuestInfo();
+  drawShop();
+  drawDayNightOverlay();
+  drawEffects();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 扩展地图尺寸
+const WORLD_WIDTH = 100;  // 原来可能是 20，现在扩大到 100
+const WORLD_HEIGHT = 100;
+const TILE_SIZE = 32;
+
+// 玩家视野范围（只渲染附近区域）
+const VIEW_RADIUS = 10;
+
+// 更新绘制地图函数：只绘制玩家附近的区域
+function drawWorld() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  for (let y = py - VIEW_RADIUS; y <= py + VIEW_RADIUS; y++) {
+    for (let x = px - VIEW_RADIUS; x <= px + VIEW_RADIUS; x++) {
+      if (x >= 0 && y >= 0 && x < WORLD_WIDTH && y < WORLD_HEIGHT) {
+        if (world[y][x] === "grass") {
+          ctx.fillStyle = "#228B22";
+        } else if (world[y][x] === "stone") {
+          ctx.fillStyle = "#808080";
+        } else if (world[y][x] === "house") {
+          ctx.fillStyle = "#8B4513";
+        } else {
+          ctx.fillStyle = "#C2B280";
+        }
+        ctx.fillRect(
+          (x - px + VIEW_RADIUS) * TILE_SIZE,
+          (y - py + VIEW_RADIUS) * TILE_SIZE,
+          TILE_SIZE,
+          TILE_SIZE
+        );
+      }
+    }
+  }
+}
+
+// 更新绘制玩家：居中显示
+function drawPlayer() {
+  ctx.fillStyle = "yellow";
+  ctx.beginPath();
+  ctx.arc(
+    VIEW_RADIUS * TILE_SIZE + TILE_SIZE/2,
+    VIEW_RADIUS * TILE_SIZE + TILE_SIZE/2,
+    TILE_SIZE/2,
+    0,
+    Math.PI * 2
+  );
+  ctx.fill();
+}
+
+// 更新绘制敌人：只绘制视野内的敌人
+function drawEnemies() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  enemies.forEach(enemy => {
+    if (Math.abs(enemy.x - px) <= VIEW_RADIUS && Math.abs(enemy.y - py) <= VIEW_RADIUS) {
+      ctx.fillStyle = "purple";
+      ctx.beginPath();
+      ctx.arc(
+        (enemy.x - px + VIEW_RADIUS) * TILE_SIZE + TILE_SIZE/2,
+        (enemy.y - py + VIEW_RADIUS) * TILE_SIZE + TILE_SIZE/2,
+        TILE_SIZE/2 - 5,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    }
+  });
+}
+
+// 更新绘制 NPC：只绘制视野内的 NPC
+function drawNPCs() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  npcs.forEach(npc => {
+    if (Math.abs(npc.x - px) <= VIEW_RADIUS && Math.abs(npc.y - py) <= VIEW_RADIUS) {
+      ctx.fillStyle = "blue";
+      ctx.fillRect(
+        (npc.x - px + VIEW_RADIUS) * TILE_SIZE + 10,
+        (npc.y - py + VIEW_RADIUS) * TILE_SIZE + 10,
+        TILE_SIZE - 20,
+        TILE_SIZE - 20
+      );
+    }
+  });
+}
+
+// 区域类型
+const REGION_TYPES = ["forest", "mine", "lake"];
+
+// 区域地图（和世界一样大，每个格子有区域属性）
+let regionMap = [];
+
+// 初始化区域地图
+function generateRegions() {
+  for (let y = 0; y < WORLD_HEIGHT; y++) {
+    regionMap[y] = [];
+    for (let x = 0; x < WORLD_WIDTH; x++) {
+      let rand = Math.random();
+      if (rand < 0.33) {
+        regionMap[y][x] = "forest";
+      } else if (rand < 0.66) {
+        regionMap[y][x] = "mine";
+      } else {
+        regionMap[y][x] = "lake";
+      }
+    }
+  }
+}
+
+// 根据区域生成资源
+function generateWorld() {
+  for (let y = 0; y < WORLD_HEIGHT; y++) {
+    world[y] = [];
+    for (let x = 0; x < WORLD_WIDTH; x++) {
+      let region = regionMap[y][x];
+      if (region === "forest") {
+        world[y][x] = Math.random() < 0.2 ? "grass" : "empty";
+      } else if (region === "mine") {
+        world[y][x] = Math.random() < 0.2 ? "stone" : "empty";
+      } else if (region === "lake") {
+        world[y][x] = "empty"; // 湖泊区域暂时为空地
+      }
+    }
+  }
+}
+
+// 绘制地图（更新：不同区域背景色）
+function drawWorld() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  for (let y = py - VIEW_RADIUS; y <= py + VIEW_RADIUS; y++) {
+    for (let x = px - VIEW_RADIUS; x <= px + VIEW_RADIUS; x++) {
+      if (x >= 0 && y >= 0 && x < WORLD_WIDTH && y < WORLD_HEIGHT) {
+        let region = regionMap[y][x];
+        if (region === "forest") {
+          ctx.fillStyle = "#006400"; // 森林深绿
+        } else if (region === "mine") {
+          ctx.fillStyle = "#2F4F4F"; // 矿区灰绿
+        } else if (region === "lake") {
+          ctx.fillStyle = "#1E90FF"; // 湖泊蓝色
+        }
+        ctx.fillRect(
+          (x - px + VIEW_RADIUS) * TILE_SIZE,
+          (y - py + VIEW_RADIUS) * TILE_SIZE,
+          TILE_SIZE,
+          TILE_SIZE
+        );
+
+        // 绘制资源
+        if (world[y][x] === "grass") {
+          ctx.fillStyle = "#228B22";
+          ctx.fillRect(
+            (x - px + VIEW_RADIUS) * TILE_SIZE + 8,
+            (y - py + VIEW_RADIUS) * TILE_SIZE + 8,
+            TILE_SIZE - 16,
+            TILE_SIZE - 16
+          );
+        } else if (world[y][x] === "stone") {
+          ctx.fillStyle = "#808080";
+          ctx.fillRect(
+            (x - px + VIEW_RADIUS) * TILE_SIZE + 8,
+            (y - py + VIEW_RADIUS) * TILE_SIZE + 8,
+            TILE_SIZE - 16,
+            TILE_SIZE - 16
+          );
+        }
+      }
+    }
+  }
+}
+
+// 初始化区域和世界
+generateRegions();
+generateWorld();
+
+// 背包扩展：加入鱼类和食物
+inventory.fish = 0;
+inventory.food = 0;
+
+// 钓鱼函数
+function fishAtLake() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  // 必须在湖泊区域才能钓鱼
+  if (regionMap[py][px] === "lake") {
+    if (Math.random() < 0.7) {
+      inventory.fish++;
+      playSound("collect");
+      addEffect(px, py, "spark");
+    } else {
+      inventory.food++;
+      playSound("collect");
+      addEffect(px, py, "spark");
+    }
+  }
+}
+
+// 绘制背包（更新：加入鱼和食物显示）
+function drawInventory() {
+  ctx.fillStyle = "white";
+  ctx.font = "16px Arial";
+  ctx.fillText("Grass: " + inventory.grass, 10, canvas.height - 140);
+  ctx.fillText("Stone: " + inventory.stone, 10, canvas.height - 120);
+  ctx.fillText("Tool: " + inventory.tool, 10, canvas.height - 100);
+  ctx.fillText("Tool Level: " + upgrades.toolLevel, 10, canvas.height - 80);
+  ctx.fillText("Gold: " + inventory.gold, 10, canvas.height - 60);
+  ctx.fillText("Fish: " + inventory.fish, 10, canvas.height - 40);
+  ctx.fillText("Food: " + inventory.food, 10, canvas.height - 20);
+}
+
+// 键盘事件更新（加入钓鱼按键）
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === "f") { // F 键钓鱼
+    fishAtLake();
+  }
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 游戏循环更新（保持不变）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+  updateTime(delta);
+  checkQuestCompletion();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawEnemies();
+  drawNPCs();
+  drawInventory();
+  drawQuestInfo();
+  drawShop();
+  drawDayNightOverlay();
+  drawEffects();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 玩家体力值
+let playerStats = {
+  stamina: 10,
+  maxStamina: 10
+};
+
+// 吃食物函数
+function eatFood() {
+  if (inventory.food > 0 && playerStats.stamina < playerStats.maxStamina) {
+    inventory.food--;
+    playerStats.stamina++;
+    playSound("collect");
+    addEffect(Math.floor(player.x), Math.floor(player.y), "spark");
+  }
+}
+
+// 吃鱼函数（鱼更强，提升采集效率）
+function eatFish() {
+  if (inventory.fish > 0) {
+    inventory.fish--;
+    upgrades.toolLevel++; // 吃鱼提升工具等级
+    playSound("collect");
+    addEffect(Math.floor(player.x), Math.floor(player.y), "spark");
+  }
+}
+
+// 更新采集函数（消耗体力）
+function collectResource() {
+  if (playerStats.stamina <= 0) return; // 没体力不能采集
+
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  let baseChance = 1;
+  let bonus = upgrades.toolLevel * 0.5;
+
+  if (world[py][px] === "grass") {
+    if (Math.random() < baseChance + bonus) {
+      inventory.grass++;
+      world[py][px] = "empty";
+      playSound("collect");
+      addEffect(px, py, "spark");
+      playerStats.stamina--; // 消耗体力
+    }
+  } else if (world[py][px] === "stone") {
+    if (Math.random() < baseChance + bonus) {
+      inventory.stone++;
+      world[py][px] = "empty";
+      playSound("collect");
+      addEffect(px, py, "spark");
+      playerStats.stamina--; // 消耗体力
+    }
+  }
+}
+
+// 绘制背包（更新：显示体力）
+function drawInventory() {
+  ctx.fillStyle = "white";
+  ctx.font = "16px Arial";
+  ctx.fillText("Grass: " + inventory.grass, 10, canvas.height - 160);
+  ctx.fillText("Stone: " + inventory.stone, 10, canvas.height - 140);
+  ctx.fillText("Tool: " + inventory.tool, 10, canvas.height - 120);
+  ctx.fillText("Tool Level: " + upgrades.toolLevel, 10, canvas.height - 100);
+  ctx.fillText("Gold: " + inventory.gold, 10, canvas.height - 80);
+  ctx.fillText("Fish: " + inventory.fish, 10, canvas.height - 60);
+  ctx.fillText("Food: " + inventory.food, 10, canvas.height - 40);
+  ctx.fillText("Stamina: " + playerStats.stamina + "/" + playerStats.maxStamina, 10, canvas.height - 20);
+}
+
+// 键盘事件更新（加入吃食物按键）
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === "e") { // E 键吃食物
+    eatFood();
+  }
+  if (e.key === "r") { // R 键吃鱼
+    eatFish();
+  }
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 玩家经验与技能
+let playerXP = 0;
+let skills = {
+  fastCollect: false,
+  strongAttack: false,
+  extraGold: false
+};
+
+// 击败敌人获得经验
+function attackEnemy() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  enemies.forEach((enemy, index) => {
+    if (enemy.x === px && enemy.y === py) {
+      let damage = upgrades.toolLevel > 0 ? upgrades.toolLevel : 1;
+      if (isNight) damage = Math.floor(damage * 0.5);
+      if (skills.strongAttack) damage *= 2; // 技能加成
+      enemy.hp -= damage;
+
+      playSound("attack");
+      addEffect(px, py, "hit");
+
+      if (enemy.hp <= 0) {
+        if (Math.random() < 0.5) {
+          inventory.stone++;
+        } else {
+          inventory.grass++;
+        }
+        inventory.gold += isNight ? 3 : 2;
+        if (skills.extraGold) inventory.gold += 1; // 技能加成
+        playerXP += 5; // 获得经验
+        enemies.splice(index, 1);
+      }
+    }
+  });
+}
+
+// 技能解锁函数
+function unlockSkill(skillName) {
+  if (playerXP >= 10) { // 每个技能需要 10 点经验
+    playerXP -= 10;
+    skills[skillName] = true;
+  }
+}
+
+// 绘制技能信息
+function drawSkills() {
+  ctx.fillStyle = "white";
+  ctx.font = "16px Arial";
+  ctx.fillText("XP: " + playerXP, canvas.width - 200, canvas.height - 80);
+  ctx.fillText("技能: ", canvas.width - 200, canvas.height - 60);
+  ctx.fillText("F: 快速采集 " + (skills.fastCollect ? "✔" : "✘"), canvas.width - 200, canvas.height - 40);
+  ctx.fillText("G: 强力攻击 " + (skills.strongAttack ? "✔" : "✘"), canvas.width - 200, canvas.height - 20);
+  ctx.fillText("H: 额外金币 " + (skills.extraGold ? "✔" : "✘"), canvas.width - 200, canvas.height);
+}
+
+// 更新采集函数（技能加成）
+function collectResource() {
+  if (playerStats.stamina <= 0) return;
+
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  let baseChance = 1;
+  let bonus = upgrades.toolLevel * 0.5;
+  if (skills.fastCollect) bonus += 0.5; // 技能加成
+
+  if (world[py][px] === "grass") {
+    if (Math.random() < baseChance + bonus) {
+      inventory.grass++;
+      world[py][px] = "empty";
+      playSound("collect");
+      addEffect(px, py, "spark");
+      playerStats.stamina--;
+    }
+  } else if (world[py][px] === "stone") {
+    if (Math.random() < baseChance + bonus) {
+      inventory.stone++;
+      world[py][px] = "empty";
+      playSound("collect");
+      addEffect(px, py, "spark");
+      playerStats.stamina--;
+    }
+  }
+}
+
+// 键盘事件更新（加入技能解锁按键）
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === "F") { // 解锁快速采集
+    unlockSkill("fastCollect");
+  }
+  if (e.key === "G") { // 解锁强力攻击
+    unlockSkill("strongAttack");
+  }
+  if (e.key === "H") { // 解锁额外金币
+    unlockSkill("extraGold");
+  }
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 游戏循环更新（加入技能显示）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+  updateTime(delta);
+  checkQuestCompletion();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawEnemies();
+  drawNPCs();
+  drawInventory();
+  drawQuestInfo();
+  drawShop();
+  drawDayNightOverlay();
+  drawEffects();
+  drawSkills();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 任务链
+let questChains = [
+  [
+    { id: 1, description: "收集 10 草", requirement: { grass: 10 }, reward: { tool: 1 }, completed: false },
+    { id: 2, description: "收集 5 石头", requirement: { stone: 5 }, reward: { gold: 10 }, completed: false },
+    { id: 3, description: "击败 3 敌人", requirement: { enemy: 3 }, reward: { tool: 2, gold: 20 }, completed: false }
+  ]
+];
+
+// 当前任务链进度
+let currentChain = questChains[0];
+let currentQuestIndex = 0;
+let activeQuest = currentChain[currentQuestIndex];
+
+// 记录击败敌人数量
+let enemyDefeatedCount = 0;
+
+// 接受任务（更新为任务链）
+function acceptQuest() {
+  if (!activeQuest) {
+    activeQuest = currentChain[currentQuestIndex];
+  }
+}
+
+// 检查任务完成情况（支持任务链）
+function checkQuestCompletion() {
+  if (activeQuest && !activeQuest.completed) {
+    let req = activeQuest.requirement;
+    let done = true;
+
+    for (let res in req) {
+      if (res === "enemy") {
+        if (enemyDefeatedCount < req[res]) {
+          done = false;
+        }
+      } else {
+        if (inventory[res] < req[res]) {
+          done = false;
+        }
+      }
+    }
+
+    if (done) {
+      // 发放奖励
+      for (let reward in activeQuest.reward) {
+        inventory[reward] += activeQuest.reward[reward];
+      }
+      activeQuest.completed = true;
+      playSound("questComplete");
+
+      // 进入下一个任务
+      currentQuestIndex++;
+      if (currentQuestIndex < currentChain.length) {
+        activeQuest = currentChain[currentQuestIndex];
+      } else {
+        activeQuest = null; // 任务链完成
+      }
+    }
+  }
+}
+
+// 更新攻击函数（记录击败敌人数量）
+function attackEnemy() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  enemies.forEach((enemy, index) => {
+    if (enemy.x === px && enemy.y === py) {
+      let damage = upgrades.toolLevel > 0 ? upgrades.toolLevel : 1;
+      if (isNight) damage = Math.floor(damage * 0.5);
+      if (skills.strongAttack) damage *= 2;
+      enemy.hp -= damage;
+
+      playSound("attack");
+      addEffect(px, py, "hit");
+
+      if (enemy.hp <= 0) {
+        if (Math.random() < 0.5) {
+          inventory.stone++;
+        } else {
+          inventory.grass++;
+        }
+        inventory.gold += isNight ? 3 : 2;
+        if (skills.extraGold) inventory.gold += 1;
+        playerXP += 5;
+        enemyDefeatedCount++; // 记录击败敌人
+        enemies.splice(index, 1);
+      }
+    }
+  });
+}
+
+// 绘制任务信息（更新为任务链）
+function drawQuestInfo() {
+  if (activeQuest) {
+    ctx.fillStyle = "white";
+    ctx.font = "16px Arial";
+    ctx.fillText("任务: " + activeQuest.description, canvas.width - 200, 20);
+    ctx.fillText("完成: " + (activeQuest.completed ? "是" : "否"), canvas.width - 200, 40);
+  } else {
+    ctx.fillStyle = "white";
+    ctx.font = "16px Arial";
+    ctx.fillText("任务链完成！", canvas.width - 200, 20);
+  }
+}
+
+// Boss 数据
+let boss = null;
+
+// 生成 Boss（随机位置）
+function spawnBoss() {
+  let bx = Math.floor(Math.random() * WORLD_WIDTH);
+  let by = Math.floor(Math.random() * WORLD_HEIGHT);
+  boss = { x: bx, y: by, hp: 50, type: "dragon" };
+}
+
+// 绘制 Boss
+function drawBoss() {
+  if (boss) {
+    let px = Math.floor(player.x);
+    let py = Math.floor(player.y);
+
+    if (Math.abs(boss.x - px) <= VIEW_RADIUS && Math.abs(boss.y - py) <= VIEW_RADIUS) {
+      ctx.fillStyle = "red";
+      ctx.beginPath();
+      ctx.arc(
+        (boss.x - px + VIEW_RADIUS) * TILE_SIZE + TILE_SIZE/2,
+        (boss.y - py + VIEW_RADIUS) * TILE_SIZE + TILE_SIZE/2,
+        TILE_SIZE,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    }
+  }
+}
+
+// 攻击 Boss
+function attackBoss() {
+  let px = Math.floor(player.x);
+  let py = Math.floor(player.y);
+
+  if (boss && boss.x === px && boss.y === py) {
+    let damage = upgrades.toolLevel > 0 ? upgrades.toolLevel : 1;
+    if (skills.strongAttack) damage *= 2;
+    if (isNight) damage = Math.floor(damage * 0.5);
+
+    boss.hp -= damage;
+    playSound("attack");
+    addEffect(px, py, "hit");
+
+    if (boss.hp <= 0) {
+      // Boss 掉落稀有奖励
+      inventory.gold += 100;
+      inventory.tool += 3;
+      playerXP += 50;
+      playSound("questComplete");
+      boss = null; // Boss 被击败
+    }
+  }
+}
+
+// 键盘事件更新（加入攻击 Boss 按键）
+window.addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (e.key === "z") { // Z 键攻击 Boss
+    attackBoss();
+  }
+});
+window.addEventListener("keyup", e => {
+  keys[e.key] = false;
+});
+
+// 游戏循环更新（加入 Boss 绘制）
+function gameLoop(time) {
+  let delta = time - lastTime;
+  lastTime = time;
+
+  handleInput();
+  updatePlayer(delta);
+  updateTime(delta);
+  checkQuestCompletion();
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawWorld();
+  drawPlayer();
+  drawEnemies();
+  drawNPCs();
+  drawInventory();
+  drawQuestInfo();
+  drawShop();
+  drawDayNightOverlay();
+  drawEffects();
+  drawSkills();
+  drawBoss();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// 初始化：生成一个 Boss
+spawnBoss();
+
+</script>
+</body>
+</html>
